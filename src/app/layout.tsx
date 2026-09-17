@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Alex_Brush, Fraunces, Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
-import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -38,7 +37,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${alexBrush.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <SiteHeader />
         <Providers>{children}</Providers>
       </body>
     </html>
