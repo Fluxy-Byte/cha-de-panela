@@ -14,7 +14,7 @@ const LANE_WIDTH = 80;
 const LANE_LEFT_X = 24;
 const LANE_RIGHT_X = 56;
 
-const NAMORO_START = new Date(2021, 0, 4);
+const NAMORO_START = new Date(2022, 0, 4);
 
 function formatTimeTogether(from: Date, to: Date) {
   let years = to.getFullYear() - from.getFullYear();
@@ -52,9 +52,9 @@ export function TimelineSection() {
 
   const milestones: Milestone[] = useMemo(
     () => [
-      { label: "Nos conhecemos", date: "Setembro de 2018", side: "left" },
-      { label: "Início do namoro", date: "04 de janeiro de 2021", side: "right" },
-      { label: "Início do noivado", date: "11 de junho de 2026", side: "left" },
+      { label: "Nos conhecemos", date: "Junho de 2019", side: "left" },
+      { label: "Início do namoro", date: "04 de janeiro de 2022", side: "right" },
+      { label: "Início do noivado", date: "13 de junho de 2026", side: "left" },
       { label: "Hoje", date: today, side: "right", isDynamic: true },
     ],
     [today],

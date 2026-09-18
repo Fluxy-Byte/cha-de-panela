@@ -15,23 +15,31 @@ async function requireSession() {
   return session;
 }
 
-export async function createGift(
-  name: string,
-  value: number,
-  imageUrl: string,
-) {
-  await requireSession();
-
-  const trimmed = name.trim();
-  if (!trimmed) {
+function assertValidGiftInput(name: string, value: number, minValue: number) {
+  if (!name.trim()) {
     throw new Error("Informe o nome do presente.");
   }
   if (!Number.isFinite(value) || value < 0) {
     throw new Error("Informe um valor válido.");
   }
+  if (!Number.isInteger(minValue) || minValue <= 0) {
+    throw new Error("Informe um valor mínimo válido (inteiro maior que zero).");
+  }
+}
+
+export async function createGift(
+  name: string,
+  value: number,
+  minValue: number,
+  imageUrl: string,
+) {
+  await requireSession();
+
+  const trimmed = name.trim();
+  assertValidGiftInput(trimmed, value, minValue);
 
   await prisma.gift.create({
-    data: { name: trimmed, value, imageUrl: imageUrl.trim() || null },
+    data: { name: trimmed, value, minValue, imageUrl: imageUrl.trim() || null },
   });
 
   revalidatePath("/dashboard");
@@ -41,21 +49,17 @@ export async function updateGift(
   giftId: string,
   name: string,
   value: number,
+  minValue: number,
   imageUrl: string,
 ) {
   await requireSession();
 
   const trimmed = name.trim();
-  if (!trimmed) {
-    throw new Error("Informe o nome do presente.");
-  }
-  if (!Number.isFinite(value) || value < 0) {
-    throw new Error("Informe um valor válido.");
-  }
+  assertValidGiftInput(trimmed, value, minValue);
 
   await prisma.gift.update({
     where: { id: giftId },
-    data: { name: trimmed, value, imageUrl: imageUrl.trim() || null },
+    data: { name: trimmed, value, minValue, imageUrl: imageUrl.trim() || null },
   });
 
   revalidatePath("/dashboard");

@@ -2,9 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import gsap from "gsap";
 import { SplitText } from "gsap/SplitText";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import campoGirassois from "@/app/assets/GirassolParaCapa.png";
 
 gsap.registerPlugin(SplitText);
@@ -15,7 +16,7 @@ export function SunflowerHero() {
   const kickerRef = useRef<HTMLParagraphElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const subRef = useRef<HTMLParagraphElement>(null);
-  const ctaRef = useRef<HTMLButtonElement>(null);
+  const ctaRef = useRef<HTMLAnchorElement>(null);
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -109,13 +110,17 @@ export function SunflowerHero() {
           Em breve chega o convite oficial do nosso Chá de Panela. Fique de
           olho.
         </p>
-        <Button
+        <Link
           ref={ctaRef}
-          size="lg"
-          className="mt-2 h-auto translate-y-3 rounded-full bg-amber-400 px-6 py-3 text-base font-semibold text-amber-950 opacity-0 shadow-lg hover:bg-amber-300"
+          href="/invitations"
+          className={buttonVariants({
+            size: "lg",
+            className:
+              "mt-2 h-auto translate-y-3 rounded-full bg-amber-400 px-6 py-3 text-base font-semibold text-amber-950 opacity-0 shadow-lg hover:bg-amber-300",
+          })}
         >
           Quero confirmar minha presença
-        </Button>
+        </Link>
       </div>
     </div>
   );

@@ -72,12 +72,12 @@ model Verification {
 }
 
 model Family {
-  id          String   @id @default(cuid())
-  cashAmount  Float?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  members     Member[]
-  claimedGift Gift?
+  id        String    @id @default(cuid())
+  code      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  members   Member[]
+  payments  Payment[]
 
   @@map("family")
 }
@@ -86,6 +86,7 @@ model Member {
   id          String   @id @default(cuid())
   name        String
   isPrincipal Boolean  @default(false)
+  isChild     Boolean  @default(false)
   familyId    String
   family      Family   @relation(fields: [familyId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
@@ -96,14 +97,44 @@ model Member {
 }
 
 model Gift {
-  id                String   @id @default(cuid())
-  name              String
-  value             Float
-  imageUrl          String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  claimedByFamilyId String?  @unique
-  claimedByFamily   Family?  @relation(fields: [claimedByFamilyId], references: [id], onDelete: SetNull)
+  id           String    @id @default(cuid())
+  name         String
+  value        Float
+  minValue     Int
+  raisedAmount Float     @default(0)
+  imageUrl     String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  payments     Payment[]
 
   @@map("gift")
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  familyId        String
+  family          Family        @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  giftId          String
+  gift            Gift          @relation(fields: [giftId], references: [id], onDelete: Cascade)
+  payerName       String
+  payerCpf        String
+  amount          Float
+  status          PaymentStatus @default(PENDING)
+  asaasPaymentId  String        @unique
+  asaasCustomerId String?
+  pixPayload      String?
+  pixQrCode       String?       @db.Text
+  confirmedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([familyId])
+  @@index([giftId])
+  @@map("payment")
 }

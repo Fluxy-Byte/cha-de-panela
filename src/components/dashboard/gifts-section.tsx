@@ -13,9 +13,15 @@ export type GiftDTO = {
   id: string;
   name: string;
   value: number;
+  minValue: number;
+  raisedAmount: number;
   imageUrl: string | null;
-  claimedByFamilyName: string | null;
 };
+
+function fundedPercentage(gift: GiftDTO) {
+  if (gift.minValue <= 0) return 0;
+  return Math.min(100, Math.round((gift.raisedAmount / gift.minValue) * 100));
+}
 
 export function GiftsSection({ gifts }: { gifts: GiftDTO[] }) {
   const [isPending, startTransition] = useTransition();
@@ -24,11 +30,13 @@ export function GiftsSection({ gifts }: { gifts: GiftDTO[] }) {
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newValue, setNewValue] = useState("");
+  const [newMinValue, setNewMinValue] = useState("");
   const [newImageUrl, setNewImageUrl] = useState("");
 
   const [editingGiftId, setEditingGiftId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editValue, setEditValue] = useState("");
+  const [editMinValue, setEditMinValue] = useState("");
   const [editImageUrl, setEditImageUrl] = useState("");
 
   function runAction(action: () => Promise<void>, onDone?: () => void) {
@@ -47,12 +55,14 @@ export function GiftsSection({ gifts }: { gifts: GiftDTO[] }) {
     event.preventDefault();
     const name = newName;
     const value = Number(newValue.replace(",", "."));
+    const minValue = Number(newMinValue);
     const imageUrl = newImageUrl;
     runAction(
-      () => createGift(name, value, imageUrl),
+      () => createGift(name, value, minValue, imageUrl),
       () => {
         setNewName("");
         setNewValue("");
+        setNewMinValue("");
         setNewImageUrl("");
         setIsCreating(false);
       },
@@ -64,6 +74,7 @@ export function GiftsSection({ gifts }: { gifts: GiftDTO[] }) {
     setEditingGiftId(gift.id);
     setEditName(gift.name);
     setEditValue(String(gift.value));
+    setEditMinValue(String(gift.minValue));
     setEditImageUrl(gift.imageUrl ?? "");
   }
 
@@ -71,9 +82,10 @@ export function GiftsSection({ gifts }: { gifts: GiftDTO[] }) {
     event.preventDefault();
     const name = editName;
     const value = Number(editValue.replace(",", "."));
+    const minValue = Number(editMinValue);
     const imageUrl = editImageUrl;
     runAction(
-      () => updateGift(giftId, name, value, imageUrl),
+      () => updateGift(giftId, name, value, minValue, imageUrl),
       () => setEditingGiftId(null),
     );
   }
@@ -107,7 +119,7 @@ export function GiftsSection({ gifts }: { gifts: GiftDTO[] }) {
         <Card>
           <CardContent className="pt-4">
             <form onSubmit={handleCreate} className="flex flex-col gap-3">
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-3">
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="new-gift-name">Eletrodoméstico</Label>
                   <Input
@@ -132,6 +144,19 @@ export function GiftsSection({ gifts }: { gifts: GiftDTO[] }) {
                     placeholder="0,00"
                   />
                 </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="new-gift-min-value">Valor mínimo (meta)</Label>
+                  <Input
+                    id="new-gift-min-value"
+                    type="number"
+                    min="1"
+                    step="1"
+                    required
+                    value={newMinValue}
+                    onChange={(event) => setNewMinValue(event.target.value)}
+                    placeholder="80"
+                  />
+                </div>
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="new-gift-image">URL da imagem</Label>
@@ -154,6 +179,7 @@ export function GiftsSection({ gifts }: { gifts: GiftDTO[] }) {
                     setIsCreating(false);
                     setNewName("");
                     setNewValue("");
+                    setNewMinValue("");
                     setNewImageUrl("");
                   }}
                 >
@@ -196,6 +222,14 @@ export function GiftsSection({ gifts }: { gifts: GiftDTO[] }) {
                     value={editValue}
                     onChange={(event) => setEditValue(event.target.value)}
                     placeholder="Valor (R$)"
+                  />
+                  <Input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={editMinValue}
+                    onChange={(event) => setEditMinValue(event.target.value)}
+                    placeholder="Valor mínimo"
                   />
                 </div>
                 <div className="flex items-center gap-2">
@@ -249,9 +283,8 @@ export function GiftsSection({ gifts }: { gifts: GiftDTO[] }) {
                       </span>
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {gift.claimedByFamilyName
-                        ? `Escolhido por ${gift.claimedByFamilyName}`
-                        : "Disponível"}
+                      {formatCurrency(gift.raisedAmount)} arrecadados de{" "}
+                      {formatCurrency(gift.minValue)} · {fundedPercentage(gift)}%
                     </span>
                   </div>
                 </div>

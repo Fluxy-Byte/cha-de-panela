@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { generateFamilyCode } from "@/lib/family-code";
 
 async function requireSession() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -15,6 +16,15 @@ async function requireSession() {
   return session;
 }
 
+async function createUniqueFamilyCode(): Promise<string> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const code = generateFamilyCode();
+    const existing = await prisma.family.findUnique({ where: { code } });
+    if (!existing) return code;
+  }
+  throw new Error("Não foi possível gerar um código único. Tente novamente.");
+}
+
 export async function createFamily(principalName: string) {
   await requireSession();
 
@@ -23,8 +33,11 @@ export async function createFamily(principalName: string) {
     throw new Error("Informe o nome do principal.");
   }
 
+  const code = await createUniqueFamilyCode();
+
   await prisma.family.create({
     data: {
+      code,
       members: {
         create: { name, isPrincipal: true },
       },
@@ -34,64 +47,11 @@ export async function createFamily(principalName: string) {
   revalidatePath("/dashboard");
 }
 
-export async function chooseGiftForFamily(familyId: string, giftId: string) {
-  await requireSession();
-
-  const gift = await prisma.gift.findUniqueOrThrow({ where: { id: giftId } });
-  if (gift.claimedByFamilyId && gift.claimedByFamilyId !== familyId) {
-    throw new Error("Este presente já foi escolhido por outra família.");
-  }
-
-  await prisma.$transaction([
-    prisma.gift.updateMany({
-      where: { claimedByFamilyId: familyId },
-      data: { claimedByFamilyId: null },
-    }),
-    prisma.gift.update({
-      where: { id: giftId },
-      data: { claimedByFamilyId: familyId },
-    }),
-    prisma.family.update({
-      where: { id: familyId },
-      data: { cashAmount: null },
-    }),
-  ]);
-
-  revalidatePath("/dashboard");
-}
-
-export async function clearFamilyGiftChoice(familyId: string) {
-  await requireSession();
-
-  await prisma.gift.updateMany({
-    where: { claimedByFamilyId: familyId },
-    data: { claimedByFamilyId: null },
-  });
-
-  revalidatePath("/dashboard");
-}
-
-export async function setFamilyCashAmount(
+export async function addMember(
   familyId: string,
-  amount: number | null,
+  name: string,
+  isChild: boolean,
 ) {
-  await requireSession();
-
-  await prisma.$transaction([
-    prisma.gift.updateMany({
-      where: { claimedByFamilyId: familyId },
-      data: { claimedByFamilyId: null },
-    }),
-    prisma.family.update({
-      where: { id: familyId },
-      data: { cashAmount: amount },
-    }),
-  ]);
-
-  revalidatePath("/dashboard");
-}
-
-export async function addMember(familyId: string, name: string) {
   await requireSession();
 
   const trimmed = name.trim();
@@ -100,7 +60,7 @@ export async function addMember(familyId: string, name: string) {
   }
 
   await prisma.member.create({
-    data: { familyId, name: trimmed, isPrincipal: false },
+    data: { familyId, name: trimmed, isPrincipal: false, isChild },
   });
 
   revalidatePath("/dashboard");
@@ -117,6 +77,17 @@ export async function renameMember(memberId: string, name: string) {
   await prisma.member.update({
     where: { id: memberId },
     data: { name: trimmed },
+  });
+
+  revalidatePath("/dashboard");
+}
+
+export async function toggleMemberIsChild(memberId: string, isChild: boolean) {
+  await requireSession();
+
+  await prisma.member.update({
+    where: { id: memberId },
+    data: { isChild },
   });
 
   revalidatePath("/dashboard");

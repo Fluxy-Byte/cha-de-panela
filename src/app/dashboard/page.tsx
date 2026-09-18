@@ -13,37 +13,36 @@ export default async function DashboardPage() {
         members: {
           orderBy: [{ isPrincipal: "desc" }, { createdAt: "asc" }],
         },
-        claimedGift: {
-          select: { id: true, name: true, value: true, imageUrl: true },
+        payments: {
+          where: { status: "CONFIRMED" },
+          orderBy: { confirmedAt: "desc" },
+          include: { gift: { select: { name: true } } },
         },
       },
     }),
     prisma.gift.findMany({
       orderBy: { createdAt: "desc" },
-      include: {
-        claimedByFamily: {
-          include: {
-            members: { where: { isPrincipal: true }, take: 1 },
-          },
-        },
-      },
     }),
   ]);
 
-  const giftOptions = gifts.map((gift) => ({
-    id: gift.id,
-    name: gift.name,
-    value: gift.value,
-    imageUrl: gift.imageUrl,
-    claimedByFamilyId: gift.claimedByFamilyId,
+  const familyDTOs = families.map((family) => ({
+    id: family.id,
+    code: family.code,
+    members: family.members,
+    confirmedPayments: family.payments.map((payment) => ({
+      id: payment.id,
+      giftName: payment.gift.name,
+      amount: payment.amount,
+    })),
   }));
 
   const giftDTOs = gifts.map((gift) => ({
     id: gift.id,
     name: gift.name,
     value: gift.value,
+    minValue: gift.minValue,
+    raisedAmount: gift.raisedAmount,
     imageUrl: gift.imageUrl,
-    claimedByFamilyName: gift.claimedByFamily?.members[0]?.name ?? null,
   }));
 
   return (
@@ -58,7 +57,7 @@ export default async function DashboardPage() {
       </div>
 
       <GiftsSection gifts={giftDTOs} />
-      <FamiliesSection families={families} gifts={giftOptions} />
+      <FamiliesSection families={familyDTOs} />
     </div>
   );
 }

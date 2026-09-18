@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, type FormEvent } from "react";
-import { Plus, Pencil, Trash2, Star, X, Check, Gift, Coins } from "lucide-react";
+import { Plus, Pencil, Trash2, Star, X, Check, Copy, Baby, Coins } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,12 +10,10 @@ import {
   createFamily,
   addMember,
   renameMember,
+  toggleMemberIsChild,
   setPrincipal,
   deleteMember,
   deleteFamily,
-  chooseGiftForFamily,
-  clearFamilyGiftChoice,
-  setFamilyCashAmount,
 } from "@/app/dashboard/families-actions";
 import { formatCurrency } from "@/lib/format";
 
@@ -23,42 +21,23 @@ type MemberDTO = {
   id: string;
   name: string;
   isPrincipal: boolean;
+  isChild: boolean;
 };
 
-export type GiftOption = {
+type ConfirmedPaymentDTO = {
   id: string;
-  name: string;
-  value: number;
-  imageUrl: string | null;
-  claimedByFamilyId: string | null;
+  giftName: string;
+  amount: number;
 };
 
 export type FamilyDTO = {
   id: string;
-  cashAmount: number | null;
+  code: string;
   members: MemberDTO[];
-  claimedGift: {
-    id: string;
-    name: string;
-    value: number;
-    imageUrl: string | null;
-  } | null;
+  confirmedPayments: ConfirmedPaymentDTO[];
 };
 
-function parseAmount(raw: string): number | null {
-  const trimmed = raw.trim().replace(",", ".");
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-export function FamiliesSection({
-  families,
-  gifts,
-}: {
-  families: FamilyDTO[];
-  gifts: GiftOption[];
-}) {
+export function FamiliesSection({ families }: { families: FamilyDTO[] }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -67,14 +46,12 @@ export function FamiliesSection({
 
   const [addingToFamilyId, setAddingToFamilyId] = useState<string | null>(null);
   const [newMemberName, setNewMemberName] = useState("");
+  const [newMemberIsChild, setNewMemberIsChild] = useState(false);
 
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
 
-  const [choiceFamilyId, setChoiceFamilyId] = useState<string | null>(null);
-  const [choiceMode, setChoiceMode] = useState<"gift" | "cash" | null>(null);
-  const [selectedGiftId, setSelectedGiftId] = useState("");
-  const [cashDraft, setCashDraft] = useState("");
+  const [copiedFamilyId, setCopiedFamilyId] = useState<string | null>(null);
 
   function runAction(action: () => Promise<void>, onDone?: () => void) {
     setError(null);
@@ -103,10 +80,12 @@ export function FamiliesSection({
   function handleAddMember(event: FormEvent, familyId: string) {
     event.preventDefault();
     const name = newMemberName;
+    const isChild = newMemberIsChild;
     runAction(
-      () => addMember(familyId, name),
+      () => addMember(familyId, name, isChild),
       () => {
         setNewMemberName("");
+        setNewMemberIsChild(false);
         setAddingToFamilyId(null);
       },
     );
@@ -127,6 +106,10 @@ export function FamiliesSection({
     );
   }
 
+  function handleToggleChild(member: MemberDTO) {
+    runAction(() => toggleMemberIsChild(member.id, !member.isChild));
+  }
+
   function handleSetPrincipal(familyId: string, memberId: string) {
     runAction(() => setPrincipal(familyId, memberId));
   }
@@ -141,43 +124,13 @@ export function FamiliesSection({
     runAction(() => deleteFamily(familyId));
   }
 
-  function startChoosingGift(familyId: string) {
-    setError(null);
-    setChoiceFamilyId(familyId);
-    setChoiceMode("gift");
-    setSelectedGiftId("");
-  }
-
-  function startChoosingCash(family: FamilyDTO) {
-    setError(null);
-    setChoiceFamilyId(family.id);
-    setChoiceMode("cash");
-    setCashDraft(family.cashAmount != null ? String(family.cashAmount) : "");
-  }
-
-  function cancelChoice() {
-    setChoiceFamilyId(null);
-    setChoiceMode(null);
-  }
-
-  function handleConfirmGift(event: FormEvent, familyId: string) {
-    event.preventDefault();
-    if (!selectedGiftId) return;
-    runAction(() => chooseGiftForFamily(familyId, selectedGiftId), cancelChoice);
-  }
-
-  function handleConfirmCash(event: FormEvent, familyId: string) {
-    event.preventDefault();
-    const amount = parseAmount(cashDraft);
-    if (amount == null) return;
-    runAction(() => setFamilyCashAmount(familyId, amount), cancelChoice);
-  }
-
-  function handleRemoveChoice(family: FamilyDTO) {
-    if (family.claimedGift) {
-      runAction(() => clearFamilyGiftChoice(family.id));
-    } else {
-      runAction(() => setFamilyCashAmount(family.id, null));
+  async function handleCopyCode(familyId: string, code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedFamilyId(familyId);
+      setTimeout(() => setCopiedFamilyId((current) => (current === familyId ? null : current)), 1500);
+    } catch {
+      // clipboard indisponível — ignora
     }
   }
 
@@ -248,10 +201,6 @@ export function FamiliesSection({
       <div className="grid gap-4 sm:grid-cols-2">
         {families.map((family) => {
           const principal = family.members.find((m) => m.isPrincipal);
-          const availableGiftOptions = gifts.filter(
-            (g) => !g.claimedByFamilyId || g.claimedByFamilyId === family.id,
-          );
-          const isChoosingForThisFamily = choiceFamilyId === family.id;
 
           return (
             <Card key={family.id}>
@@ -270,164 +219,41 @@ export function FamiliesSection({
                 </Button>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
-                {isChoosingForThisFamily && choiceMode === "gift" ? (
-                  <form
-                    onSubmit={(event) => handleConfirmGift(event, family.id)}
-                    className="flex flex-col gap-2 rounded-lg border border-border p-3"
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-border px-3 py-2">
+                  <span className="text-sm">
+                    Código de acesso:{" "}
+                    <span className="font-mono font-semibold tracking-wider">
+                      {family.code}
+                    </span>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Copiar código"
+                    onClick={() => handleCopyCode(family.id, family.code)}
                   >
-                    <select
-                      required
-                      autoFocus
-                      value={selectedGiftId}
-                      onChange={(event) => setSelectedGiftId(event.target.value)}
-                      className="h-9 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                    >
-                      <option value="" disabled>
-                        Selecione um presente
-                      </option>
-                      {availableGiftOptions.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.name} · {formatCurrency(g.value)}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex gap-2">
-                      <Button type="submit" size="sm" disabled={isPending}>
-                        Confirmar
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={cancelChoice}
+                    {copiedFamilyId === family.id ? <Check /> : <Copy />}
+                  </Button>
+                </div>
+
+                {family.confirmedPayments.length > 0 && (
+                  <ul className="flex flex-col gap-1.5">
+                    {family.confirmedPayments.map((payment) => (
+                      <li
+                        key={payment.id}
+                        className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm"
                       >
-                        Cancelar
-                      </Button>
-                    </div>
-                  </form>
-                ) : isChoosingForThisFamily && choiceMode === "cash" ? (
-                  <form
-                    onSubmit={(event) => handleConfirmCash(event, family.id)}
-                    className="flex flex-col gap-2 rounded-lg border border-border p-3"
-                  >
-                    <Input
-                      autoFocus
-                      required
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={cashDraft}
-                      onChange={(event) => setCashDraft(event.target.value)}
-                      placeholder="Valor (R$)"
-                    />
-                    <div className="flex gap-2">
-                      <Button type="submit" size="sm" disabled={isPending}>
-                        Confirmar
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={cancelChoice}
-                      >
-                        Cancelar
-                      </Button>
-                    </div>
-                  </form>
-                ) : family.claimedGift ? (
-                  <div className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
-                    <span className="flex items-center gap-2 text-sm">
-                      {family.claimedGift.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={family.claimedGift.imageUrl}
-                          alt={family.claimedGift.name}
-                          className="size-6 shrink-0 rounded object-cover ring-1 ring-border"
-                          onError={(event) => {
-                            event.currentTarget.style.visibility = "hidden";
-                          }}
-                        />
-                      ) : (
-                        <Gift className="size-4 text-muted-foreground" />
-                      )}
-                      {family.claimedGift.name}
-                      <span className="text-muted-foreground">
-                        · {formatCurrency(family.claimedGift.value)}
-                      </span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Trocar presente"
-                        title="Trocar presente"
-                        onClick={() => startChoosingGift(family.id)}
-                        disabled={isPending}
-                      >
-                        <Pencil />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Remover escolha"
-                        onClick={() => handleRemoveChoice(family)}
-                        disabled={isPending}
-                      >
-                        <X />
-                      </Button>
-                    </span>
-                  </div>
-                ) : family.cashAmount != null ? (
-                  <div className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
-                    <span className="flex items-center gap-2 text-sm">
-                      <Coins className="size-4 text-muted-foreground" />
-                      Contribuição: {formatCurrency(family.cashAmount)}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Editar contribuição"
-                        onClick={() => startChoosingCash(family)}
-                        disabled={isPending}
-                      >
-                        <Pencil />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Remover contribuição"
-                        onClick={() => handleRemoveChoice(family)}
-                        disabled={isPending}
-                      >
-                        <X />
-                      </Button>
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2">
-                    <span className="mr-auto text-sm text-muted-foreground">
-                      Nenhuma escolha ainda
-                    </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => startChoosingGift(family.id)}
-                      disabled={isPending || availableGiftOptions.length === 0}
-                    >
-                      Escolher presente
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => startChoosingCash(family)}
-                      disabled={isPending}
-                    >
-                      Contribuir em dinheiro
-                    </Button>
-                  </div>
+                        <span className="flex items-center gap-2">
+                          <Coins className="size-4 text-muted-foreground" />
+                          {payment.giftName}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {formatCurrency(payment.amount)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
 
                 <ul className="flex flex-col gap-2">
@@ -474,8 +300,38 @@ export function FamiliesSection({
                               <Star className="size-3.5 fill-primary text-primary" />
                             )}
                             {member.name}
+                            {member.isChild && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                                <Baby className="size-3" />
+                                Criança
+                              </span>
+                            )}
                           </span>
                           <span className="flex items-center gap-1">
+                            {!member.isPrincipal && (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={
+                                  member.isChild
+                                    ? "Desmarcar como criança"
+                                    : "Marcar como criança"
+                                }
+                                title={
+                                  member.isChild
+                                    ? "Desmarcar como criança"
+                                    : "Marcar como criança"
+                                }
+                                onClick={() => handleToggleChild(member)}
+                                disabled={isPending}
+                              >
+                                <Baby
+                                  className={
+                                    member.isChild ? "text-primary" : undefined
+                                  }
+                                />
+                              </Button>
+                            )}
                             {!member.isPrincipal && (
                               <Button
                                 variant="ghost"
@@ -520,29 +376,43 @@ export function FamiliesSection({
                 {addingToFamilyId === family.id ? (
                   <form
                     onSubmit={(event) => handleAddMember(event, family.id)}
-                    className="flex items-center gap-2"
+                    className="flex flex-col gap-2"
                   >
-                    <Input
-                      autoFocus
-                      required
-                      placeholder="Nome da pessoa"
-                      value={newMemberName}
-                      onChange={(event) => setNewMemberName(event.target.value)}
-                    />
-                    <Button type="submit" size="sm" disabled={isPending}>
-                      Adicionar
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setAddingToFamilyId(null);
-                        setNewMemberName("");
-                      }}
-                    >
-                      Cancelar
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        autoFocus
+                        required
+                        placeholder="Nome da pessoa"
+                        value={newMemberName}
+                        onChange={(event) => setNewMemberName(event.target.value)}
+                      />
+                      <Button type="submit" size="sm" disabled={isPending}>
+                        Adicionar
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setAddingToFamilyId(null);
+                          setNewMemberName("");
+                          setNewMemberIsChild(false);
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={newMemberIsChild}
+                        onChange={(event) =>
+                          setNewMemberIsChild(event.target.checked)
+                        }
+                        className="size-4 rounded border-input"
+                      />
+                      É criança (não cobrar contribuição)
+                    </label>
                   </form>
                 ) : (
                   <Button
